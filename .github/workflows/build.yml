@@ -1,0 +1,39 @@
+name: Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --release
+    
+    - name: Run tests
+      run: cargo test
+
+    - name: Rename ostree-pkg
+      run: mv target/release/libostreepkg.so target/release/ostree-pkg.so
+
+    - name: Rename boot-shell
+      run: mv target/release/libbootshell.so target/release/boot-shell.so
+
+    - name: Upload ostree-pkg
+      uses: actions/upload-artifact@v4
+      with:
+        name: ostree-pkg
+        path: target/release/ostree-pkg.so
+         
+    - name: Upload boot-shell
+      uses: actions/upload-artifact@v4
+      with:
+        name: boot-shell
+        path: target/release/boot-shell.so

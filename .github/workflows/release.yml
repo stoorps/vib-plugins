@@ -1,0 +1,44 @@
+name: Create release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build
+      run: cargo build --release --verbose
+    
+    - name: Run tests
+      run: cargo test --verbose
+
+    - name: Rename ostree-pkg
+      run: mv target/release/libostreepkg.so target/release/ostree-pkg.so
+
+    - name: Rename boot-shell
+      run: mv target/release/libbootshell.so target/release/boot-shell.so
+
+    - name: Upload ostree-pkg
+      uses: actions/upload-artifact@v4
+      with:
+        name: ostree-pkg
+        path: target/release/ostree-pkg.so
+         
+    - name: Upload boot-shell
+      uses: actions/upload-artifact@v4
+      with:
+        name: boot-shell
+        path: target/release/boot-shell.so
+
+    - uses: ncipollo/release-action@v1
+      with:
+        artifacts: "target/release/ostree-pkg.so,target/release/boot-shell.so"
+        makeLatest: true
+        
