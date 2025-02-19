@@ -74,13 +74,13 @@ fn build(module: PkgModule, recipe: Recipe) -> String {
         As::system => (
             script_dir.join("boot-shell-system"),
             service_parent_dir.join("system"),
-            service_parent_dir.join("system/boot-shell-system"),
+            service_parent_dir.join("system/boot-shell-system.service"),
             "--system boot-shell-system",
         ),
         As::user => (
             script_dir.join("boot-shell-user"),
             service_parent_dir.join("user"),
-            service_parent_dir.join("user/boot-shell-user"),
+            service_parent_dir.join("user/boot-shell-user.service"),
             "--user boot-shell-user",
         ),
     };

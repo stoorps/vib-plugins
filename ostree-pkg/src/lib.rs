@@ -110,13 +110,13 @@ fn build(module: PkgModule, recipe: Recipe) -> String {
         As::system => (
             script_dir.join("ostree-pkg-system"),
             service_parent_dir.join("system"),
-            service_parent_dir.join("system/ostree-pkg-system"),
+            service_parent_dir.join("system/ostree-pkg-system.service"),
             "--system ostree-pkg-system",
         ),
         As::user => (
             script_dir.join("ostree-pkg-user"),
             service_parent_dir.join("user"),
-            service_parent_dir.join("user/ostree-pkg-user"),
+            service_parent_dir.join("user/ostree-pkg-user.service"),
             "--user ostree-pkg-system",
         ),
     };
