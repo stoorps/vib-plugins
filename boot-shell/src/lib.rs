@@ -200,7 +200,7 @@ mod tests {
         let script_content = fs::read_to_string(script_path).unwrap();
         assert!(script_content.contains("echo 'Hello, system!'"));
 
-        let service_path = tmp_dir.join("etc/systemd/system/boot-shell-system");
+        let service_path = tmp_dir.join("etc/systemd/system/boot-shell-system.service");
         assert!(service_path.exists());
         let service_content = fs::read_to_string(service_path).unwrap();
         assert_eq!(service_content, format!("{SYSTEM_SERVICE}\n"));
@@ -229,7 +229,7 @@ mod tests {
         let script_content = fs::read_to_string(script_path).unwrap();
         assert!(script_content.contains("echo 'Hello, user!'"));
 
-        let service_path = tmp_dir.join("etc/systemd/user/boot-shell-user");
+        let service_path = tmp_dir.join("etc/systemd/user/boot-shell-user.service");
         assert!(service_path.exists());
         let service_content = fs::read_to_string(service_path).unwrap();
         assert_eq!(service_content, format!("{USER_SERVICE}\n"));
@@ -267,7 +267,7 @@ mod tests {
         assert!(script_content.contains("echo 'First command'"));
         assert!(script_content.contains("echo 'Second command'")); //Check if appended
 
-        let service_path = tmp_dir.path().join("etc/systemd/system/boot-shell-system");
+        let service_path = tmp_dir.path().join("etc/systemd/system/boot-shell-system.service");
         assert!(service_path.exists());
         let service_content = fs::read_to_string(service_path).unwrap();
         assert_eq!(service_content, format!("{SYSTEM_SERVICE}\n"));

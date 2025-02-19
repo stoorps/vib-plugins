@@ -307,7 +307,7 @@ mod tests {
         let script_content = fs::read_to_string(script_path).unwrap();
         assert_eq!(script_content, "dnf uninstall -y  package1\n");
 
-        let service_path = Path::new(&includes_path).join("etc/systemd/system/ostree-pkg-system");
+        let service_path = Path::new(&includes_path).join("etc/systemd/system/ostree-pkg-system.service");
         let service_content = fs::read_to_string(service_path).unwrap();
         assert_eq!(service_content, format!("{SYSTEM_SERVICE}\n"));
 
@@ -340,7 +340,7 @@ mod tests {
         let script_content = fs::read_to_string(script_path).unwrap();
         assert_eq!(script_content, "dnf5 -y copr enable  myrepo\n");
 
-        let service_path = Path::new(&includes_path).join("etc/systemd/user/ostree-pkg-user");
+        let service_path = Path::new(&includes_path).join("etc/systemd/user/ostree-pkg-user.service");
         let service_content = fs::read_to_string(service_path).unwrap();
         assert_eq!(service_content, format!("{USER_SERVICE}\n"));
 
@@ -393,7 +393,7 @@ mod tests {
         let script_content = fs::read_to_string(script_path).unwrap();
         assert_eq!(script_content, "flatpak remote-add --if-not-exists  flathub\n");
 
-        let service_path = Path::new(&includes_path).join("etc/systemd/user/ostree-pkg-user");
+        let service_path = Path::new(&includes_path).join("etc/systemd/user/ostree-pkg-user.service");
         let service_content = fs::read_to_string(service_path).unwrap();
         assert_eq!(service_content, format!("{USER_SERVICE}\n"));
 
