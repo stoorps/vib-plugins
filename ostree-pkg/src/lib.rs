@@ -117,7 +117,7 @@ fn build(module: PkgModule, recipe: Recipe) -> String {
             script_dir.join("ostree-pkg-user"),
             service_parent_dir.join("user"),
             service_parent_dir.join("user/ostree-pkg-user.service"),
-            "--user ostree-pkg-system",
+            "--user ostree-pkg-user",
         ),
     };
 
@@ -334,7 +334,7 @@ mod tests {
             ..Default::default()
         };
         let result = build(module, recipe);
-        assert_eq!(result, "systemctl enable --user ostree-pkg-system");
+        assert_eq!(result, "systemctl enable --user ostree-pkg-user");
 
         let script_path = Path::new(&includes_path).join("usr/bin/ostree-pkg-user");
         let script_content = fs::read_to_string(script_path).unwrap();
@@ -387,7 +387,7 @@ mod tests {
             ..Default::default()
         };
         let result = build(module, recipe);
-        assert_eq!(result, "systemctl enable --user ostree-pkg-system");
+        assert_eq!(result, "systemctl enable --user ostree-pkg-user");
 
         let script_path = Path::new(&includes_path).join("usr/bin/ostree-pkg-user");
         let script_content = fs::read_to_string(script_path).unwrap();
