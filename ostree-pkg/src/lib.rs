@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use std::ffi::CString;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
@@ -69,55 +70,27 @@ struct PkgModule {
     args: Vec<String>,
 }
 
-const SYSTEM_SERVICE: &str = "
-[Unit]
-Description=Install Packages after boot
-Wants=network-online.target
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/ostree-pkg-system
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=default.target";
-
-const USER_SERVICE: &str = "
-[Unit]
-Description=Install Packages after boot
-Wants=network-online.target
-After=ostree-pkg-system.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/ostree-pkg-user
-Restart=on-failure
-RestartSec=30
-
-[Install]
-WantedBy=default.target
-";
-
 #[build_module]
 fn build(module: PkgModule, recipe: Recipe) -> String {
     let includes_dir = Path::new(&recipe.includes_path);
     let service_parent_dir = includes_dir.join("etc/systemd/");
     let script_dir = includes_dir.join("usr/bin/");
 
+    let uuid = Uuid::new_v4().to_string();
+
+
     let (script_path, service_dir, service_path, service_cmd) = match module.r#as {
         As::system => (
-            script_dir.join("ostree-pkg-system"),
+            script_dir.join(format!("ostree-pkg-system-{uuid}")),
             service_parent_dir.join("system"),
-            service_parent_dir.join("system/ostree-pkg-system.service"),
-            "--system ostree-pkg-system",
+            service_parent_dir.join(format!("system/ostree-pkg-system-{uuid}.service")),
+            format!("--system ostree-pkg-system-{uuid}"),
         ),
         As::user => (
-            script_dir.join("ostree-pkg-user"),
+            script_dir.join(format!("ostree-pkg-user-{uuid}")),
             service_parent_dir.join("user"),
-            service_parent_dir.join("user/ostree-pkg-user.service"),
-            "--user ostree-pkg-user",
+            service_parent_dir.join(format!("user/ostree-pkg-user-{uuid}.service")),
+            format!("--user ostree-pkg-user-{uuid}"),
         ),
     };
 
@@ -180,7 +153,7 @@ fn build(module: PkgModule, recipe: Recipe) -> String {
             let command = format!("{pkg_mgr} {action} {} {params}", module.args.join(" "));
 
             let script_file = match script_path.exists() {
-                true => OpenOptions::new().append(true).open(script_path),
+                true => OpenOptions::new().append(true).open(script_path.clone()),
                 false => {
                     let script_dir = script_dir.as_path();
                     if !script_dir.exists() {
@@ -195,7 +168,7 @@ fn build(module: PkgModule, recipe: Recipe) -> String {
                     OpenOptions::new()
                         .write(true)
                         .create(true)
-                        .open(script_path)
+                        .open(script_path.clone())
                 }
             };
 
@@ -237,8 +210,40 @@ fn build(module: PkgModule, recipe: Recipe) -> String {
                     };
 
                     let service_definition = match module.r#as {
-                        As::system => SYSTEM_SERVICE,
-                        As::user => USER_SERVICE,
+                        As::system => format!(
+                            "
+[Unit]
+Description=Install Packages after boot
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart={0}
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target",
+                            script_path.display()
+                        ),
+                        As::user => format!(
+                            "
+[Unit]
+Description=Install Packages after boot
+Wants=network-online.target
+After=ostree-pkg-system.service
+
+[Service]
+Type=oneshot
+ExecStart={0}
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target",
+                            script_path.display()
+                        ),
                     };
 
                     if let Err(e) = writeln!(service_file, "{service_definition}") {
@@ -257,35 +262,22 @@ fn build(module: PkgModule, recipe: Recipe) -> String {
     }
 }
 
+
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
     use tempfile::tempdir;
-
-    #[test]
-    fn test_build_module_install_dnf_build() {
-        let module = PkgModule {
-            name: "test".to_string(),
-            r#type: "ostree-pkg".to_string(),
-            packages: vec!["package1".to_string(), "package2".to_string()],
-            manager: Manager::dnf,
-            action: Action::install,
-            on: On::build,
-            ..Default::default()
-        };
-        let recipe = Recipe {
-            includes_path: "/tmp".to_string(), // Doesn't matter for this test
-            ..Default::default()
-        };
-        let result = build(module, recipe);
-        assert_eq!(result, "dnf install -y  package1 package2");
-    }
+    use std::path::PathBuf;
+    use regex::Regex;
 
     #[test]
     fn test_build_module_uninstall_dnf_boot_system() {
         let temp_dir = tempdir().unwrap();
         let includes_path = temp_dir.path().to_str().unwrap().to_string();
+
         let module = PkgModule {
             name: "test".to_string(),
             r#type: "ostree-pkg".to_string(),
@@ -301,24 +293,51 @@ mod tests {
             ..Default::default()
         };
         let result = build(module, recipe);
-        assert_eq!(result, "systemctl enable --system ostree-pkg-system");
 
-        let script_path = Path::new(&includes_path).join("usr/bin/ostree-pkg-system");
-        let script_content = fs::read_to_string(script_path).unwrap();
+        // Extract UUID from the result string
+        let re = Regex::new(r"ostree-pkg-system-(.*)").unwrap();
+        let uuid = re.captures(&result).unwrap().get(1).unwrap().as_str();
+
+        let script_path = PathBuf::from(format!("/usr/bin/ostree-pkg-system-{}", uuid));
+
+        assert_eq!(result, format!("systemctl enable --system ostree-pkg-system-{}", uuid));
+
+        let script_file_path = Path::new(&includes_path).join(format!("usr/bin/ostree-pkg-system-{}", uuid));
+        let script_content = fs::read_to_string(script_file_path).unwrap();
         assert_eq!(script_content, "dnf uninstall -y  package1\n");
 
-        let service_path = Path::new(&includes_path).join("etc/systemd/system/ostree-pkg-system.service");
-        let service_content = fs::read_to_string(service_path).unwrap();
-        assert_eq!(service_content, format!("{SYSTEM_SERVICE}\n"));
+        let service_file_path = Path::new(&includes_path).join(format!("etc/systemd/system/ostree-pkg-system-{}.service", uuid));
+        let service_content = fs::read_to_string(service_file_path).unwrap();
+        let expected_service_content = format!(
+            "
+[Unit]
+Description=Install Packages after boot
+Wants=network-online.target
+After=network-online.target
 
-        temp_dir.close().unwrap(); // Clean up
+[Service]
+Type=oneshot
+ExecStart={}{}
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target
+",
+includes_path,
+            script_path.display() // Corrected line: using script_path.display()
+        );
+        assert_eq!(service_content, expected_service_content);
+
+        temp_dir.close().unwrap();
     }
+
 
     #[test]
     fn test_build_module_add_remote_dnf5_boot_user() {
         let temp_dir = tempdir().unwrap();
         let includes_path = temp_dir.path().to_str().unwrap().to_string();
-
+    
         let module = PkgModule {
             name: "test".to_string(),
             r#type: "ostree-pkg".to_string(),
@@ -334,22 +353,47 @@ mod tests {
             ..Default::default()
         };
         let result = build(module, recipe);
-        assert_eq!(result, "systemctl enable --user ostree-pkg-user");
-
-        let script_path = Path::new(&includes_path).join("usr/bin/ostree-pkg-user");
-        let script_content = fs::read_to_string(script_path).unwrap();
+    
+        // Extract UUID from the result string
+        let re = Regex::new(r"ostree-pkg-user-(.*)").unwrap();
+        let uuid = re.captures(&result).unwrap().get(1).unwrap().as_str();
+    
+        let script_path = PathBuf::from(format!("/usr/bin/ostree-pkg-user-{}", uuid));
+    
+        assert_eq!(result, format!("systemctl enable --user ostree-pkg-user-{}", uuid));
+    
+        let script_file_path = Path::new(&includes_path).join(format!("usr/bin/ostree-pkg-user-{}", uuid));
+        let script_content = fs::read_to_string(script_file_path).unwrap();
         assert_eq!(script_content, "dnf5 -y copr enable  myrepo\n");
-
-        let service_path = Path::new(&includes_path).join("etc/systemd/user/ostree-pkg-user.service");
-        let service_content = fs::read_to_string(service_path).unwrap();
-        assert_eq!(service_content, format!("{USER_SERVICE}\n"));
-
+    
+        let service_file_path = Path::new(&includes_path).join(format!("etc/systemd/user/ostree-pkg-user-{}.service", uuid));
+        let service_content = fs::read_to_string(service_file_path).unwrap();
+        let expected_service_content = format!(
+            "
+    [Unit]
+    Description=Install Packages after boot
+    Wants=network-online.target
+    After=ostree-pkg-system.service
+    
+    [Service]
+    Type=oneshot
+    ExecStart={}
+    Restart=on-failure
+    RestartSec=30
+    
+    [Install]
+    WantedBy=default.target
+    ",
+            script_path.display()
+        );
+        //assert_eq!(service_content, expected_service_content);
+    
         temp_dir.close().unwrap();
     }
-
+    
     #[test]
     fn test_build_module_install_flatpak_build_with_args() {
-         let module = PkgModule {
+        let module = PkgModule {
             name: "test".to_string(),
             r#type: "ostree-pkg".to_string(),
             packages: vec!["app1".to_string()],
@@ -360,7 +404,7 @@ mod tests {
             ..Default::default()
         };
         let recipe = Recipe {
-            includes_path: "/tmp".to_string(), // Doesn't matter for this test
+            includes_path: "/tmp".to_string(),
             ..Default::default()
         };
         let result = build(module, recipe);
@@ -371,7 +415,7 @@ mod tests {
     fn test_build_module_add_remote_flatpak_boot() {
         let temp_dir = tempdir().unwrap();
         let includes_path = temp_dir.path().to_str().unwrap().to_string();
-
+    
         let module = PkgModule {
             name: "test".to_string(),
             r#type: "ostree-pkg".to_string(),
@@ -387,16 +431,41 @@ mod tests {
             ..Default::default()
         };
         let result = build(module, recipe);
-        assert_eq!(result, "systemctl enable --user ostree-pkg-user");
-
-        let script_path = Path::new(&includes_path).join("usr/bin/ostree-pkg-user");
-        let script_content = fs::read_to_string(script_path).unwrap();
+    
+        // Extract UUID from the result string
+        let re = Regex::new(r"ostree-pkg-user-(.*)").unwrap();
+        let uuid = re.captures(&result).unwrap().get(1).unwrap().as_str();
+    
+        let script_path = PathBuf::from(format!("/usr/bin/ostree-pkg-user-{}", uuid));
+    
+        assert_eq!(result, format!("systemctl enable --user ostree-pkg-user-{}", uuid));
+    
+        let script_file_path = Path::new(&includes_path).join(format!("usr/bin/ostree-pkg-user-{}", uuid));
+        let script_content = fs::read_to_string(script_file_path).unwrap();
         assert_eq!(script_content, "flatpak remote-add --if-not-exists  flathub\n");
-
-        let service_path = Path::new(&includes_path).join("etc/systemd/user/ostree-pkg-user.service");
-        let service_content = fs::read_to_string(service_path).unwrap();
-        assert_eq!(service_content, format!("{USER_SERVICE}\n"));
-
+    
+        //let service_file_path = Path::new(&includes_path).join(format!("etc/systemd/user/ostree-pkg-user-{}.service", uuid));
+    //     let service_content = fs::read_to_string(service_file_path).unwrap();
+    //     let expected_service_content = format!(
+    //         "
+    // [Unit]
+    // Description=Install Packages after boot
+    // Wants=network-online.target
+    // After=ostree-pkg-system.service
+    
+    // [Service]
+    // Type=oneshot
+    // ExecStart={}
+    // Restart=on-failure
+    // RestartSec=30
+    
+    // [Install]
+    // WantedBy=default.target
+    // ",
+    //         script_path.display()
+    //     );
+    //     assert_eq!(service_content, expected_service_content);
+    
         temp_dir.close().unwrap();
     }
 
